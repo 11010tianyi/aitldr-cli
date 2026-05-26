@@ -3,6 +3,7 @@ Core lookup logic: Official > AI Cache > AI Generation
 """
 
 import re
+import httpx
 from typing import Optional, Tuple
 from dataclasses import dataclass
 
@@ -99,17 +100,56 @@ def lookup_command(query: str, config: Config, explain: bool = False) -> Tuple[O
 
     if command:
         if explain:
-            # Look up explanation for the base command
-            base_command = command.split()[0]
-            content, _ = lookup_page(base_command, config)
-            if content:
-                # Extract relevant info from content
-                explanation = f"\nExplanation for '{base_command}':\n{content}"
+            # Use AI to generate explanation for the full command
+            explanation = generate_command_explanation(command, config)
+            if explanation:
                 return command, explanation
 
         return command, None
 
     return None, None
+
+
+def generate_command_explanation(command: str, config: Config) -> Optional[str]:
+    """Generate explanation for a command using AI."""
+    provider = config.model.provider.lower()
+
+    if provider == "deepseek":
+        if not config.deepseek.api_key:
+            return None
+
+        client = httpx.Client(timeout=30.0)
+
+        try:
+            response = client.post(
+                "https://api.deepseek.com/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {config.deepseek.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": config.model.model,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "You are a command-line expert. Explain the given shell command concisely. Include what each command does and how they work together.",
+                        },
+                        {"role": "user", "content": f"Explain this command: {command}"},
+                    ],
+                    "temperature": 0.3,
+                    "max_tokens": 500,
+                },
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                return data["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            print(f"Error generating explanation: {e}")
+        finally:
+            client.close()
+
+    return None
 
 
 def refresh_page(command: str, config: Config) -> bool:
