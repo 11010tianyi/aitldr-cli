@@ -4,6 +4,8 @@ Core lookup logic: Official > AI Cache > AI Generation
 
 import re
 import httpx
+import subprocess
+import shutil
 from typing import Optional, Tuple
 from dataclasses import dataclass
 
@@ -11,6 +13,22 @@ from .config import Config, load_config
 from .pages import get_official_page
 from .cache import get_ai_page, save_ai_page, delete_ai_page, AiPageMetadata
 from .ai import generate_page, generate_command_from_natural_language
+
+
+def command_exists(command: str) -> bool:
+    """Check if a command exists on the system"""
+    if not command or command.strip() == "":
+        return False
+
+    try:
+        result = subprocess.run(
+            ["sh", "-c", f"command -v {command} 2>/dev/null || which {command} 2>/dev/null || type {command} 2>/dev/null"],
+            capture_output=True,
+            timeout=2
+        )
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+        return False
 
 
 @dataclass
@@ -63,21 +81,29 @@ def lookup_page(command: str, config: Config, offline: bool = False) -> Tuple[Op
     """
     Look up a TLDR page with priority: Official > AI Cache > AI Generation
 
-    Returns (content, source)
+    offline: Skip network requests (official pages), but allow AI generation
     """
-    # Step 1: Check official page
-    official = get_official_page(command)
-    if official:
-        return official, PageSource("official")
+    # Step 1: Check official page (skip if offline)
+    if not offline:
+        official = get_official_page(command)
+        if official:
+            return official, PageSource("official")
 
     # Step 2: Check AI cache
     cached = get_ai_page(command)
     if cached:
         return cached, PageSource("ai_cache")
 
-    # Step 3: AI Generation (skip if offline)
+    # Step 3: AI Generation
+    # Skip command check in offline mode (allows forced generation)
     if not offline and config.general.cache_enabled:
-        print(f"No official page found. Generating AI page for '{command}'...")
+        # Check if command exists before generating
+        if not command_exists(command):
+            return None, PageSource("ai_generated")
+
+    # Generate AI page (offline mode skips command check)
+    if config.general.cache_enabled:
+        print(f"Generating AI page for '{command}'...")
 
         generated = generate_page(command, config)
         if generated:
@@ -113,8 +139,38 @@ def lookup_command(query: str, config: Config, explain: bool = False) -> Tuple[O
 def generate_command_explanation(command: str, config: Config) -> Optional[str]:
     """Generate explanation for a command using AI."""
     provider = config.model.provider.lower()
+    language = config.general.language
 
-    if provider == "deepseek":
+    if language == "zh":
+        system_prompt = "你是一个命令行专家。简洁地解释给定的shell命令。说明每个命令的作用以及它们如何协同工作。用中文回答。"
+        user_prompt = f"解释这个命令: {command}"
+    else:
+        system_prompt = "You are a command-line expert. Explain the given shell command concisely. Include what each command does and how they work together."
+        user_prompt = f"Explain this command: {command}"
+
+    if provider == "openai":
+        if not config.openai.api_key:
+            return None
+
+        import openai
+        client = openai.OpenAI(api_key=config.openai.api_key)
+
+        try:
+            response = client.chat.completions.create(
+                model=config.model.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.3,
+                max_tokens=500,
+            )
+            return response.choices[0].message.content or ""
+        except Exception as e:
+            print(f"Error generating explanation: {e}")
+            return None
+
+    elif provider == "deepseek":
         if not config.deepseek.api_key:
             return None
 
@@ -132,9 +188,9 @@ def generate_command_explanation(command: str, config: Config) -> Optional[str]:
                     "messages": [
                         {
                             "role": "system",
-                            "content": "You are a command-line expert. Explain the given shell command concisely. Include what each command does and how they work together.",
+                            "content": system_prompt,
                         },
-                        {"role": "user", "content": f"Explain this command: {command}"},
+                        {"role": "user", "content": user_prompt},
                     ],
                     "temperature": 0.3,
                     "max_tokens": 500,
@@ -154,6 +210,11 @@ def generate_command_explanation(command: str, config: Config) -> Optional[str]:
 
 def refresh_page(command: str, config: Config) -> bool:
     """Force refresh an AI-generated page"""
+    # Check if command exists before generating
+    if not command_exists(command):
+        print(f"[yellow]Command '{command}' not found on this system.[/yellow]")
+        return False
+
     # Delete cached page
     delete_ai_page(command)
 

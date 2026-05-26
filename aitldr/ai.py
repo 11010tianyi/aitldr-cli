@@ -19,32 +19,37 @@ class GeneratedPage:
     metadata: AiPageMetadata
 
 
-def get_openai_page(command: str, api_key: str, model: str = "gpt-4o-mini") -> Optional[GeneratedPage]:
+def get_openai_page(command: str, api_key: str, model: str = "gpt-4o-mini", language: str = "zh") -> Optional[GeneratedPage]:
     """Generate TLDR page using OpenAI"""
     import openai
 
     client = openai.OpenAI(api_key=api_key)
 
+    if language == "zh":
+        language_instruction = "用中文输出命令说明和示例描述"
+        not_exists_msg = "如果不确定这个命令是否存在，或者它可能是拼写错误，请输出：\n# {command}\n\n> 命令未找到，可能不存在或为拼写错误。"
+    else:
+        language_instruction = "Output command descriptions and examples in English"
+        not_exists_msg = "If unsure if this command exists or if it might be a typo, output:\n# {command}\n\n> Command not found, may not exist or is a typo."
+
     prompt = f"""Generate a TLDR page for command: {command}
 
-Requirements:
-- Follow official tldr-pages format
-- Maximum 8 examples
-- Use concise wording
-- Prefer real-world usage
-- Use placeholders like {{{{file}}}}
-- DO NOT invent options or commands
-- Prefer official docs/man pages over hallucination
-- Start with a brief description and link to official docs if known
+CRITICAL REQUIREMENTS:
+- {not_exists_msg}
+- DO NOT invent options, flags, or examples for non-existent commands
+- Only generate content if you are confident this is a real, documented command
+- If this looks like a typo of a known command (e.g., 'tarr' might be 'tar'), mention the likely correct command
+
+{language_instruction}
 
 Format:
 # {command}
 
-> Brief description
+> Brief description (if command exists)
 > More information: <official_url>
 
 - Example description:
-`{command} {{{{arg1}}}} {{{{arg2}}}}`
+`{command} {{{{arg1}}}}`
 
 Generate only the markdown, no other text.
 """
@@ -70,25 +75,31 @@ Generate only the markdown, no other text.
         return None
 
 
-def get_deepseek_page(command: str, api_key: str, model: str = "deepseek-chat") -> Optional[GeneratedPage]:
+def get_deepseek_page(command: str, api_key: str, model: str = "deepseek-chat", language: str = "zh") -> Optional[GeneratedPage]:
     """Generate TLDR page using DeepSeek"""
     client = httpx.Client(timeout=30.0)
 
+    if language == "zh":
+        language_instruction = "用中文输出命令说明和示例描述"
+        not_exists_msg = "如果不确定这个命令是否存在，或者它可能是拼写错误，请输出：\n# {command}\n\n> 命令未找到，可能不存在或为拼写错误。"
+    else:
+        language_instruction = "Output command descriptions and examples in English"
+        not_exists_msg = "If unsure if this command exists or if it might be a typo, output:\n# {command}\n\n> Command not found, may not exist or is a typo."
+
     prompt = f"""Generate a TLDR page for command: {command}
 
-Requirements:
-- Follow official tldr-pages format
-- Maximum 8 examples
-- Use concise wording
-- Prefer real-world usage
-- Use placeholders like {{{{file}}}}
-- DO NOT invent options or commands
-- Prefer official docs/man pages over hallucination
+CRITICAL REQUIREMENTS:
+- {not_exists_msg}
+- DO NOT invent options, flags, or examples for non-existent commands
+- Only generate content if you are confident this is a real, documented command
+- If this looks like a typo of a known command (e.g., 'tarr' might be 'tar'), mention the likely correct command
+
+{language_instruction}
 
 Format:
 # {command}
 
-> Brief description
+> Brief description (if command exists)
 
 - Example description:
 `{command} {{{{arg1}}}}`
@@ -129,24 +140,31 @@ Generate only the markdown, no other text.
     return None
 
 
-def get_ollama_page(command: str, endpoint: str, model: str) -> Optional[GeneratedPage]:
+def get_ollama_page(command: str, endpoint: str, model: str, language: str = "zh") -> Optional[GeneratedPage]:
     """Generate TLDR page using Ollama"""
     client = httpx.Client(timeout=30.0)
 
+    if language == "zh":
+        language_instruction = "用中文输出命令说明和示例描述"
+        not_exists_msg = "如果不确定这个命令是否存在，或者它可能是拼写错误，请输出：\n# {command}\n\n> 命令未找到，可能不存在或为拼写错误。"
+    else:
+        language_instruction = "Output command descriptions and examples in English"
+        not_exists_msg = "If unsure if this command exists or if it might be a typo, output:\n# {command}\n\n> Command not found, may not exist or is a typo."
+
     prompt = f"""Generate a TLDR page for command: {command}
 
-Requirements:
-- Follow official tldr-pages format
-- Maximum 8 examples
-- Use concise wording
-- Prefer real-world usage
-- Use placeholders like {{{{file}}}}
-- DO NOT invent options or commands
+CRITICAL REQUIREMENTS:
+- {not_exists_msg}
+- DO NOT invent options, flags, or examples for non-existent commands
+- Only generate content if you are confident this is a real, documented command
+- If this looks like a typo of a known command (e.g., 'tarr' might be 'tar'), mention the likely correct command
+
+{language_instruction}
 
 Format:
 # {command}
 
-> Brief description
+> Brief description (if command exists)
 
 - Example description:
 `{command} {{{{arg1}}}}`
@@ -189,21 +207,22 @@ Generate only the markdown, no other text.
 def generate_page(command: str, config: Config) -> Optional[GeneratedPage]:
     """Generate a TLDR page using configured AI backend"""
     provider = config.model.provider.lower()
+    language = config.general.language
 
     if provider == "openai":
         if not config.openai.api_key:
             print("Error: OpenAI API key not configured. Set OPENAI_API_KEY environment variable.")
             return None
-        return get_openai_page(command, config.openai.api_key, config.model.model)
+        return get_openai_page(command, config.openai.api_key, config.model.model, language)
 
     elif provider == "deepseek":
         if not config.deepseek.api_key:
             print("Error: DeepSeek API key not configured. Set DEEPSEEK_API_KEY environment variable.")
             return None
-        return get_deepseek_page(command, config.deepseek.api_key, config.model.model)
+        return get_deepseek_page(command, config.deepseek.api_key, config.model.model, language)
 
     elif provider == "ollama":
-        return get_ollama_page(command, config.ollama.endpoint, config.ollama.model)
+        return get_ollama_page(command, config.ollama.endpoint, config.ollama.model, language)
 
     else:
         print(f"Error: Unknown AI provider: {provider}")
@@ -213,6 +232,7 @@ def generate_page(command: str, config: Config) -> Optional[GeneratedPage]:
 def generate_command_from_natural_language(query: str, config: Config) -> Optional[str]:
     """Generate a command from natural language description"""
     provider = config.model.provider.lower()
+    language = config.general.language
 
     if provider == "openai":
         import openai

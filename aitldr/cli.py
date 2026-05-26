@@ -17,6 +17,7 @@ from .core import (
     is_natural_language,
     is_destructive_command,
     refresh_page,
+    command_exists,
     PageSource,
 )
 from .cache import save_rating
@@ -112,8 +113,8 @@ def cli(query: str, explain: bool, refresh: bool, offline: bool, model: str):
 
         if not content:
             console.print(f"[red]No TLDR page found for '{query}'.[/red]")
-            if offline:
-                console.print("[yellow]Use --offline to disable AI generation.[/yellow]")
+            if not offline and not command_exists(query):
+                console.print("[yellow]Command not found on this system. Use --offline to force AI generation.[/yellow]")
             sys.exit(1)
 
         # Display content
@@ -173,8 +174,11 @@ def init():
     config_dir.mkdir(parents=True, exist_ok=True)
 
     from .config import save_config, Config
+    from .config import GeneralConfig
 
-    save_config(Config())
+    config = Config()
+    config.general.language = "zh"
+    save_config(config)
 
     console.print(f"[green]Configuration initialized at {config_dir}[/green]")
     console.print("\nEdit config.toml to set your API keys and preferences.")
@@ -190,6 +194,7 @@ def status():
 General:
   Explain default: {config.general.explain_default}
   Cache enabled: {config.general.cache_enabled}
+  Language: {config.general.language}
 
 Model:
   Provider: {config.model.provider}

@@ -42,6 +42,7 @@ class GeneralConfig:
     """General configuration"""
     explain_default: bool = False
     cache_enabled: bool = True
+    language: str = "zh"
 
 
 @dataclass
@@ -114,6 +115,7 @@ def save_config(config: Config) -> None:
         "general": {
             "explain_default": config.general.explain_default,
             "cache_enabled": config.general.cache_enabled,
+            "language": config.general.language,
         },
         "model": {
             "provider": config.model.provider,
