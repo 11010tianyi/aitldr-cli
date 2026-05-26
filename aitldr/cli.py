@@ -24,28 +24,45 @@ from .cache import save_rating
 console = Console()
 
 
-@click.group()
+@click.command()
 @click.version_option(version=__version__)
-def cli():
-    """AI-native TLDR CLI with AI fallback for missing pages."""
-    pass
-
-
-@cli.command()
 @click.argument("query", required=False)
 @click.option("--explain", "-e", is_flag=True, help="Explain the command")
 @click.option("--refresh", "-r", is_flag=True, help="Refresh AI-generated page")
 @click.option("--offline", "-o", is_flag=True, help="Offline mode, no AI generation")
 @click.option("--model", "-m", help="Specify AI model provider")
-def show(query: str, explain: bool, refresh: bool, offline: bool, model: str):
-    """
-    Show TLDR page for a command or natural language query.
+def cli(query: str, explain: bool, refresh: bool, offline: bool, model: str):
+    """AI-native TLDR CLI with AI fallback for missing pages.
 
     Examples:
         aitldr tar
         aitldr "删除7天前的日志"
         aitldr --explain "删除7天前的日志"
+        aitldr status
+        aitldr init
     """
+    # Handle subcommands
+    if query is None:
+        console.print("[red]Error: No query provided.[/red]")
+        console.print("Usage: aitldr <command> or \"<natural language query>\"")
+        console.print("\nOther commands:")
+        console.print("  aitldr status   - Show configuration status")
+        console.print("  aitldr init      - Initialize configuration")
+        sys.exit(1)
+
+    if query == "status":
+        status()
+        return
+    elif query == "init":
+        init()
+        return
+    elif query == "rate":
+        console.print("Usage: aitldr rate <command> up|down")
+        return
+    elif query == "submit":
+        console.print("Usage: aitldr submit <command>")
+        return
+
     config = load_config()
 
     # Override model if specified
@@ -55,11 +72,6 @@ def show(query: str, explain: bool, refresh: bool, offline: bool, model: str):
     # Use config default for explain if not specified
     if not explain:
         explain = config.general.explain_default
-
-    if not query:
-        console.print("[red]Error: No query provided.[/red]")
-        console.print("Usage: aitldr <command> or \"<natural language query>\"")
-        sys.exit(1)
 
     # Check if natural language or command
     if is_natural_language(query):
@@ -94,7 +106,7 @@ def show(query: str, explain: bool, refresh: bool, offline: bool, model: str):
                 console.print("[green]Page refreshed successfully![/green]")
             else:
                 console.print("[red]Failed to refresh page.[/red]")
-                sys.exit(1)
+            sys.exit(1)
 
         content, source = lookup_page(query, config, offline)
 
@@ -118,7 +130,7 @@ def show(query: str, explain: bool, refresh: bool, offline: bool, model: str):
             console.print("\n[dim]AI-generated pages may contain inaccuracies. Verify before use.[/dim]")
 
 
-@cli.command()
+@click.command()
 @click.argument("command")
 @click.argument("direction", type=click.Choice(["up", "down"]))
 def rate(command: str, direction: str):
@@ -128,7 +140,7 @@ def rate(command: str, direction: str):
     console.print(f"[green]Rated '{command}' {direction}. Thanks for your feedback![/green]")
 
 
-@cli.command()
+@click.command()
 @click.argument("command")
 def submit(command: str):
     """Submit an AI-generated page to the official tldr-pages repository."""
@@ -155,7 +167,6 @@ To submit '{command}' to tldr-pages:
     ))
 
 
-@cli.command()
 def init():
     """Initialize aitldr configuration."""
     config_dir = get_config_dir()
@@ -169,7 +180,6 @@ def init():
     console.print("\nEdit config.toml to set your API keys and preferences.")
 
 
-@cli.command()
 def status():
     """Show current configuration status."""
     config = load_config()
