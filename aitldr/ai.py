@@ -243,4 +243,43 @@ def generate_command_from_natural_language(query: str, config: Config) -> Option
             print(f"Error generating command: {e}")
             return None
 
+    elif provider == "deepseek":
+        if not config.deepseek.api_key:
+            print("Error: DeepSeek API key not configured.")
+            return None
+
+        client = httpx.Client(timeout=30.0)
+
+        try:
+            response = client.post(
+                "https://api.deepseek.com/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {config.deepseek.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": config.model.model,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "You are a command-line expert. Generate the exact shell command that answers the user's request. Output only the command, no explanation.",
+                        },
+                        {"role": "user", "content": query},
+                    ],
+                    "temperature": 0.1,
+                    "max_tokens": 200,
+                },
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                command = data["choices"][0]["message"]["content"] or ""
+                return command.strip()
+        except Exception as e:
+            print(f"Error generating command: {e}")
+        finally:
+            client.close()
+
+        return None
+
     return None
