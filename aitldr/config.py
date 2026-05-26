@@ -133,5 +133,5 @@ def save_config(config: Config) -> None:
 
     import tomli_w
 
-    with open(config_path, "w") as f:
+    with open(config_path, "wb") as f:
         tomli_w.dump(data, f)
