@@ -1,0 +1,3 @@
+[workspace]
+members = ["aitldr-ai", "aitldr-cache", "aitldr-risk", "aitldr-submit"]
+resolver = "2"

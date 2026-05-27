@@ -1,0 +1,18 @@
+[package]
+name = "aitldr-submit"
+version = "0.1.0"
+edition = "2021"
+[dependencies]
+thiserror = "1.0"
+EOF && cat > /Users/tianyi/Documents/claude_project/aitldr-cli/aitldr-core/aitldr-submit/src/lib.rs << 'EOF'
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum SubmitError {
+    #[error("Not implemented")]
+    NotImplemented,
+}
+
+pub fn get_instructions(cmd: &str) -> String {
+    format!("Submit {} to tldr-pages at https://github.com/tldr-pages/tldr", cmd)
+}
